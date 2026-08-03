@@ -1,0 +1,12 @@
+{
+  "name": "gentle-ai",
+  "image": "mcr.microsoft.com/devcontainers/go:1.25-bookworm",
+  "postCreateCommand": "go build -trimpath -o /usr/local/bin/gentle-ai ./cmd/gentle-ai",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ]
+    }
+  }
+}
