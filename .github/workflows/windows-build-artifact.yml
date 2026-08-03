@@ -1,0 +1,43 @@
+name: Windows Build Artifact
+
+# Produces a downloadable gentle-ai.exe for contributors who cannot run the Go
+# compiler locally (e.g. corporate AppLocker/WDAC policy blocks go.exe). This
+# is separate from ci.yml and windows-full-suite.yml, which only build the
+# binary as an ephemeral test fixture and never publish it.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows binary
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build gentle-ai.exe
+        shell: pwsh
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.sha }}" -o "gentle-ai.exe" ./cmd/gentle-ai
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: gentle-ai-windows-${{ github.sha }}
+          path: gentle-ai.exe
+          retention-days: 14
