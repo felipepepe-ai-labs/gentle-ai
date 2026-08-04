@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>gentle-ai · interactive code map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0a0e14;
+    --bg-panel:#0d1220;
+    --bg-card:#111828;
+    --border:#22293b;
+    --border-hover:#2f3950;
+    --accent:#22d3ee;
+    --accent-dim:#0e7490;
+    --text:#e6edf5;
+    --text-dim:#8b95a8;
+    --text-faint:#525c70;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --up:#fb7185;
+    --down:#3b82f6;
+    --flow:#fbbf24;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    overflow:hidden;
+  }
+  #app{
+    display:grid;
+    grid-template-columns: 260px 1fr 300px;
+    grid-template-rows: 58px 1fr;
+    grid-template-areas:
+      "header header header"
+      "left canvas right";
+    height:100vh;
+    width:100vw;
+  }
+
+  /* ---------- header ---------- */
+  header{
+    grid-area:header;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 18px;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, #0c1120, #0a0e14);
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-icon{
+    width:32px;height:32px;border-radius:8px;
+    background:radial-gradient(circle at 30% 30%, var(--accent), var(--accent-dim));
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;flex:none;
+    box-shadow:0 0 12px rgba(34,211,238,.35);
+  }
+  .brand-text h1{font-size:14px;margin:0;font-weight:700;letter-spacing:.2px;color:var(--text);}
+  .brand-text .sub{font-size:10.5px;color:var(--text-dim);}
+  .brand-meta{font-size:10.5px;color:var(--text-faint);margin-top:1px;font-family:var(--mono);}
+  .header-controls{display:flex;align-items:center;gap:8px;}
+  button.ctrl{
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    border-radius:6px;
+    padding:6px 10px;
+    font-size:12px;
+    cursor:pointer;
+    font-family:var(--sans);
+    transition:all .12s ease;
+  }
+  button.ctrl:hover{border-color:var(--accent);color:var(--accent);}
+  button.ctrl.zoom{padding:6px 11px;font-weight:700;}
+  .divider{width:1px;height:20px;background:var(--border);margin:0 4px;}
+
+  /* ---------- sidebars shared ---------- */
+  aside{
+    overflow-y:auto;
+    padding:14px 14px 24px;
+    background:var(--bg-panel);
+  }
+  #left{grid-area:left;border-right:1px solid var(--border);}
+  #right{grid-area:right;border-left:1px solid var(--border);}
+  .sb-section{margin-bottom:20px;}
+  .sb-title{
+    font-size:10.5px;font-weight:700;letter-spacing:.08em;
+    color:var(--text-faint);margin:0 0 8px;text-transform:uppercase;
+  }
+  input#search{
+    width:100%;padding:8px 10px;border-radius:6px;
+    border:1px solid var(--border);background:var(--bg-card);
+    color:var(--text);font-size:12.5px;font-family:var(--sans);
+    outline:none;
+  }
+  input#search:focus{border-color:var(--accent);}
+  .flow-row{
+    border:1px solid var(--border);border-radius:8px;
+    padding:8px 10px;margin-bottom:6px;cursor:pointer;
+    transition:all .12s ease;
+  }
+  .flow-row:hover{border-color:var(--border-hover);background:var(--bg-card);}
+  .flow-row.active{border-color:var(--flow);background:rgba(251,191,36,.08);box-shadow:0 0 0 1px rgba(251,191,36,.25) inset;}
+  .flow-row .ft{font-size:11.5px;font-weight:600;color:var(--text);font-family:var(--mono);line-height:1.4;}
+  .flow-row .fo{font-size:10.5px;color:var(--text-dim);margin-top:3px;line-height:1.4;}
+  .filter-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-dim);margin-bottom:6px;cursor:pointer;}
+  .filter-row input{accent-color:var(--accent);}
+  .swatch{width:9px;height:9px;border-radius:3px;flex:none;}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-dim);margin-bottom:6px;}
+
+  /* ---------- canvas ---------- */
+  #canvas-wrap{
+    grid-area:canvas;
+    position:relative;
+    overflow:hidden;
+    background:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,.035) 1px, transparent 1px) 0 0/22px 22px,
+      var(--bg);
+    cursor:grab;
+  }
+  #canvas-wrap.panning{cursor:grabbing;}
+  #stage{
+    position:absolute;top:0;left:0;
+    transform-origin:0 0;
+  }
+  svg#edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none;}
+  .column{
+    position:absolute;
+    top:20px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background:rgba(255,255,255,.012);
+    padding:38px 14px 14px;
+  }
+  .column-header{
+    position:absolute;top:12px;left:16px;right:16px;
+    font-size:10.5px;font-weight:700;letter-spacing:.09em;
+    color:var(--text-faint);text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .node{
+    position:absolute;
+    width:200px;
+    border:1px solid var(--border);
+    border-radius:9px;
+    background:var(--bg-card);
+    padding:9px 10px 8px;
+    cursor:pointer;
+    transition:opacity .15s ease, border-color .15s ease, box-shadow .15s ease, transform .1s ease;
+  }
+  .node:hover{border-color:var(--border-hover);}
+  .node .title{font-size:12.5px;font-weight:700;color:var(--text);line-height:1.25;padding-right:56px;}
+  .node .badge{
+    position:absolute;top:9px;right:9px;
+    font-size:8.5px;font-weight:700;letter-spacing:.03em;
+    padding:2px 6px;border-radius:20px;color:#0a0e14;
+    text-transform:uppercase;white-space:nowrap;
+  }
+  .node .desc{font-size:10.5px;color:var(--text-dim);margin-top:5px;line-height:1.35;}
+  .node .path{font-size:9.5px;color:var(--text-faint);margin-top:7px;font-family:var(--mono);word-break:break-all;line-height:1.3;}
+  .node.dim{opacity:.16;}
+  .node.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent), 0 0 16px rgba(34,211,238,.28);}
+  .node.hidden{display:none;}
+
+  /* ---------- selection panel ---------- */
+  #sel-empty{color:var(--text-faint);font-size:12px;line-height:1.6;padding-top:8px;}
+  #sel-content{display:none;}
+  #sel-content .sname{font-size:15px;font-weight:700;color:var(--text);}
+  #sel-content .sdesc{font-size:11.5px;color:var(--text-dim);margin-top:6px;line-height:1.5;}
+  #sel-content .spath{font-size:10.5px;color:var(--accent);margin-top:6px;font-family:var(--mono);word-break:break-all;}
+  .pill-list{display:flex;flex-wrap:wrap;gap:5px;}
+  .pill{
+    font-size:10px;padding:3px 8px;border-radius:20px;
+    background:var(--bg-card);border:1px solid var(--border);
+    color:var(--text-dim);font-family:var(--mono);
+  }
+  .pill.flow-pill{border-color:var(--flow);color:var(--flow);background:rgba(251,191,36,.08);}
+  .evidence-line{
+    font-size:10px;font-family:var(--mono);color:var(--text-dim);
+    background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+    padding:6px 8px;margin-bottom:5px;line-height:1.4;word-break:break-all;
+  }
+  .rel-key{
+    border-top:1px solid var(--border);margin-top:16px;padding-top:14px;
+  }
+  .rel-key-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);margin-bottom:7px;}
+  .rel-line{width:18px;height:0;border-top:3px solid;flex:none;border-radius:2px;}
+
+  /* ---------- status pill ---------- */
+  #status-pill{
+    position:absolute;left:16px;bottom:16px;
+    background:var(--bg-card);border:1px solid var(--border-hover);
+    border-radius:20px;padding:8px 14px;font-size:11.5px;
+    color:var(--text);font-family:var(--mono);
+    box-shadow:0 4px 18px rgba(0,0,0,.4);
+    display:none;z-index:20;
+  }
+  #status-pill b{color:var(--accent);}
+  #status-pill .u{color:var(--up);}
+  #status-pill .d{color:var(--down);}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border-hover);border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="brand-icon">&#9881;</div>
+      <div class="brand-text">
+        <h1 id="repo-name">gentle-ai <span style="font-weight:400;color:var(--text-dim);font-size:11px;">· interactive code map</span></h1>
+        <div class="brand-meta" id="gen-meta"></div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <button class="ctrl zoom" id="zoom-out" title="Zoom out">&minus;</button>
+      <button class="ctrl zoom" id="zoom-in" title="Zoom in">+</button>
+      <div class="divider"></div>
+      <button class="ctrl" id="fit-btn">Fit map</button>
+      <button class="ctrl" id="clear-btn">Clear focus</button>
+    </div>
+  </header>
+
+  <aside id="left">
+    <div class="sb-section">
+      <div class="sb-title">Find a module</div>
+      <input id="search" type="text" placeholder="name, role, or path…" autocomplete="off">
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">End-to-end flows</div>
+      <div id="flow-list"></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">Module filters</div>
+      <div id="filter-list"></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">Legend</div>
+      <div id="legend-list"></div>
+    </div>
+  </aside>
+
+  <div id="canvas-wrap">
+    <div id="stage">
+      <svg id="edges"></svg>
+      <div id="columns-layer"></div>
+      <div id="nodes-layer"></div>
+    </div>
+    <div id="status-pill"></div>
+  </div>
+
+  <aside id="right">
+    <div class="sb-title">Selection</div>
+    <div id="sel-empty">Click a module card to inspect its entrypoints, tests, constraints, flows, and evidence.</div>
+    <div id="sel-content">
+      <div class="sname" id="sel-name"></div>
+      <div class="sdesc" id="sel-desc"></div>
+      <div class="spath" id="sel-path"></div>
+
+      <div class="sb-section" style="margin-top:16px;">
+        <div class="sb-title">Entrypoints</div>
+        <div class="pill-list" id="sel-entrypoints"></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-title">Related tests</div>
+        <div class="pill-list" id="sel-tests"></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-title">Constraints</div>
+        <div class="pill-list" id="sel-constraints"></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-title">Flows</div>
+        <div class="pill-list" id="sel-flows"></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-title">Evidence</div>
+        <div id="sel-evidence"></div>
+      </div>
+
+      <div class="rel-key">
+        <div class="sb-title">Relationship colors</div>
+        <div class="rel-key-row"><span class="rel-line" style="border-color:var(--up);"></span> Upstream callers</div>
+        <div class="rel-key-row"><span class="rel-line" style="border-color:var(--down);"></span> Downstream dependencies</div>
+        <div class="rel-key-row"><span class="rel-line" style="border-color:var(--flow);"></span> Selected flow path</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const DATA = {"generated_at": "2026-08-04T23:05:05Z", "generated_from_commit": "4398f3476899aa043b89242eebfc260429aab2e3", "nodes": [{"id": "cmd_gentle_ai", "path": "cmd/gentle-ai/main.go", "role": "entrypoint", "entrypoints": ["main"], "tests": [], "constraints": "sole compiled CLI binary; ldflags inject version", "evidence": "cmd/gentle-ai/main.go:13 func main() calls app.ResolveVersion and app.Run()"}, {"id": "app", "path": "internal/app", "role": "core-orchestrator", "entrypoints": ["Run", "RunArgs", "runUpgrade", "tuiExecute"], "tests": ["internal/app/app_test.go", "internal/app/help_test.go", "internal/app/parity_test.go", "internal/app/selfupdate_test.go", "internal/app/update_test.go", "internal/app/upgrade_test.go", "internal/app/version_test.go"], "constraints": "top-level CLI argument dispatcher; wires cli/tui/update/planner/pipeline/system together", "evidence": "internal/app/app.go:59 func Run(); :63 func RunArgs(...); :234 calls cli.RunInstall; :444 func runUpgrade(...); :517 func tuiExecute(...)"}, {"id": "cli", "path": "internal/cli", "role": "core-command-facade", "entrypoints": ["RunInstall", "RunSync", "RunReview", "RunDoctor", "RunSDDStatus", "RunSDDAttempt"], "tests": ["internal/cli/*_test.go (177 files)"], "constraints": "largest package (246 files); owns installer flags, review facade, SDD status commands", "evidence": "internal/cli/run.go:118 func RunInstall(...); internal/cli/review_facade.go:599 func RunReview(...); internal/cli/sync.go func RunSync; internal/cli/doctor.go func RunDoctor"}, {"id": "reviewtransaction", "path": "internal/reviewtransaction", "role": "core-domain-engine", "entrypoints": ["CompactAuthoritativeStore", "Load"], "tests": ["internal/reviewtransaction/*_test.go (110 files)"], "constraints": "bounded native code-review (RDD) receipt/authority engine; 210 files, second largest package", "evidence": "internal/reviewtransaction/compact_store.go:898 func CompactAuthoritativeStore(ctx, repo, lineageID) (CompactStore, error)"}, {"id": "components", "path": "internal/components", "role": "core-asset-writers", "entrypoints": ["mutationjournal.New"], "tests": ["internal/components/**/*_test.go (63 files)"], "constraints": "hub of installer-time file writers/generators (mutationjournal, sdd, gga, mcp, persona, permissions, theme, uninstall, engram, filemerge, agentguidance, communitytool, opencodedefault, opencodeplugin, skills subpackages)", "evidence": "internal/components/mutationjournal/journal.go:50 func New(roots ...string) *Journal"}, {"id": "tui", "path": "internal/tui", "role": "entry-interactive-ui", "entrypoints": ["screens.NewModelPickerState"], "tests": ["internal/tui/**/*_test.go (39 files)"], "constraints": "Bubbletea-based interactive install/upgrade UI; entry layer (only outbound calls)", "evidence": "internal/tui/screens/model_picker.go:98 func NewModelPickerState(cachePath, settingsPath string) ModelPickerState; internal/app/app.go:195 m.ExecuteFn = tuiExecute"}, {"id": "agents", "path": "internal/agents", "role": "core-agent-registry", "entrypoints": ["DiscoverInstalled", "ResolveCapabilityManifest", "ConfigRootsForBackup"], "tests": ["internal/agents/*_test.go (24 files)"], "constraints": "high fan-in core package modeling supported agent runtimes and their capabilities", "evidence": "internal/agents/discovery.go:26 func DiscoverInstalled(reg *Registry, homeDir string) []InstalledAgent; internal/agents/capability_manifest.go:43 func ResolveCapabilityManifest(adapter Adapter)"}, {"id": "sddstatus", "path": "internal/sddstatus", "role": "core-sdd-lifecycle", "entrypoints": ["BindApprovedReview"], "tests": ["internal/sddstatus/*_test.go (36 files)"], "constraints": "binds SDD change lifecycle state to an approved review receipt; depends on reviewtransaction + pathidentity", "evidence": "internal/sddstatus/review_binding.go:54 func BindApprovedReview(ctx, repo, change, lineage, expected string) (ReviewBinding, error); internal/sddstatus/legacy_binding_read.go:25 references reviewtransaction.SDDReceiptRef"}, {"id": "update", "path": "internal/update", "role": "core-self-update", "entrypoints": ["CheckAll", "CheckFiltered", "upgrade.Execute", "upgrade.ExecuteWithOptions"], "tests": ["internal/update/**/*_test.go (20 files)"], "constraints": "self-update / tool-update flow; includes internal/update/upgrade subpackage (collapsed here per 20-node cap)", "evidence": "internal/app/app.go:34-37 updateCheckAll = update.CheckAll; updateCheckFiltered = update.CheckFiltered; upgradeExecute = upgrade.Execute (internal/update/upgrade); :26 import internal/update/upgrade"}, {"id": "model", "path": "internal/model", "role": "core-model-catalog", "entrypoints": ["ClaudeEffortsForModel", "ClaudeEffortAllowedForModel", "ModelCapability"], "tests": ["internal/model/*_test.go (10 files)"], "constraints": "high fan-in core package: model/effort identifiers shared across almost all other packages", "evidence": "internal/model/claude_model.go:72 func ClaudeEffortsForModel(alias ClaudeModelAlias) []ClaudeEffort; internal/model/capability.go:7 func ModelCapability(modelID string) string"}, {"id": "system", "path": "internal/system", "role": "core-environment-detection", "entrypoints": ["Detect", "DetectDependencies", "DetectTools"], "tests": ["internal/system/*_test.go (9 files)"], "constraints": "OS/tool/dependency detection consumed by cli.RunInstall and app.runUpgrade", "evidence": "internal/system/detect.go:80 func Detect(ctx context.Context) (DetectionResult, error)"}, {"id": "assets", "path": "internal/assets", "role": "core-embedded-assets", "entrypoints": ["MustRead", "Read", "SDDCommandsAssetDir"], "tests": ["internal/assets/*_test.go (12 files)"], "constraints": "embedded skill/command/asset text read by installer and components", "evidence": "internal/assets/assets.go:9 func MustRead(path string) string; :18 func Read(path string) (string, error)"}, {"id": "agentbuilder", "path": "internal/agentbuilder", "role": "entry-agent-generation", "entrypoints": ["NewEngine"], "tests": ["internal/agentbuilder/*_test.go (7 files)"], "constraints": "generation-engine wrapper per agent runtime (Claude/OpenCode); entry layer, only outbound calls", "evidence": "internal/agentbuilder/engine.go:24 func NewEngine(agentID model.AgentID) GenerationEngine"}, {"id": "recoverytrace", "path": "internal/recoverytrace", "role": "core-recovery-diagnostics", "entrypoints": ["RecoveryRows"], "tests": ["internal/recoverytrace/*_test.go (5 files)"], "constraints": "high fan-in per CBM architecture summary (90 inbound); renders recovery/incident rows for tui and cli", "evidence": "internal/recoverytrace/rows.go:83 func RecoveryRows() []Row"}, {"id": "backup", "path": "internal/backup", "role": "entry-backup-restore", "entrypoints": ["CreateArchive", "ExtractArchive"], "tests": ["internal/backup/*_test.go (5 files)"], "constraints": "tar-based config backup/restore; entry layer, only outbound calls", "evidence": "internal/backup/compression.go:29 func CreateArchive(archivePath string, entries []ArchiveEntry) error; :91 func ExtractArchive(...)"}, {"id": "planner", "path": "internal/planner", "role": "core-dependency-resolver", "entrypoints": ["NewResolver", "MVPGraph", "BuildReviewPayload"], "tests": ["internal/planner/*_test.go (3 files)"], "constraints": "resolves the installable-agent dependency graph for a selection and builds the review payload for confirmation", "evidence": "internal/cli/run.go:129 planner.NewResolver(planner.MVPGraph()).Resolve(input.Selection); :136 review := planner.BuildReviewPayload(input.Selection, resolved)"}, {"id": "pipeline", "path": "internal/pipeline", "role": "core-stage-runner", "entrypoints": ["Runner.Run"], "tests": ["internal/pipeline/*_test.go (1 file)"], "constraints": "executes ordered install/upgrade Stage/Step sequences with progress events; used by app.tuiExecute and tui", "evidence": "internal/pipeline/runner.go:14 func (r Runner) Run(stage Stage, steps []Step) StageResult"}, {"id": "catalog", "path": "internal/catalog", "role": "core-agent-catalog", "entrypoints": ["AllAgents", "MVPAgents", "IsMVPAgent"], "tests": ["internal/catalog/*_test.go (2 files)"], "constraints": "static registry of supported agent identities consumed by planner/cli/agentbuilder", "evidence": "internal/catalog/agents.go:37 func AllAgents() []Agent; :43 func MVPAgents() []Agent"}, {"id": "pathidentity", "path": "internal/pathidentity", "role": "core-path-utility", "entrypoints": ["Contains"], "tests": ["internal/pathidentity/identity_test.go"], "constraints": "small (2 files) but very high call-site fan-in per CBM hotspots (1684, mostly from tests); real non-test importers are only reviewtransaction and sddstatus", "evidence": "internal/pathidentity/identity.go:83 func Contains(root, path string) bool; grep -rl \"internal/pathidentity\" internal --include=*.go (non-test) -> internal/reviewtransaction, internal/sddstatus, internal/releasepolicy"}, {"id": "contracts_review_integration", "path": "contracts/review-integration", "role": "schema-contract", "entrypoints": [], "tests": ["internal/cli/review_schema_test.go", "internal/cli/review_transition_command_test.go", "internal/cli/review_status_contract_test.go", "internal/cli/review_consent_relay_test.go"], "constraints": "JSON Schema + fixtures for the review-receipt contract, versioned v1/v2; not Go code, treated as schema node", "evidence": "internal/cli/review_transition_command_test.go:140 os.ReadFile(filepath.Join(\"..\",\"..\",\"contracts\",\"review-integration\",\"v1\",\"schemas\",schemaFile)); internal/cli/review_start_contract.go:17 const ReviewIntegrationStartSchemaID = \".../contracts/review-integration/v2/schemas/start.schema.json\""}], "edges": [{"from": "cmd_gentle_ai", "to": "app", "type": "calls", "evidence": "cmd/gentle-ai/main.go:14-16 calls app.Run()"}, {"from": "app", "to": "cli", "type": "calls", "evidence": "internal/app/app.go:234 cli.RunInstall(args[1:], result); imports internal/cli"}, {"from": "app", "to": "planner", "type": "imports", "evidence": "internal/app/app.go:20 import internal/planner"}, {"from": "app", "to": "pipeline", "type": "imports", "evidence": "internal/app/app.go:19 import internal/pipeline"}, {"from": "app", "to": "tui", "type": "calls", "evidence": "internal/app/app.go:195 m.ExecuteFn = tuiExecute; :24 import internal/tui"}, {"from": "app", "to": "update", "type": "calls", "evidence": "internal/app/app.go:34-37 updateCheckAll = update.CheckAll; upgradeExecute = upgrade.Execute (internal/update/upgrade)"}, {"from": "app", "to": "system", "type": "calls", "evidence": "internal/app/app.go:40 detectSystem = system.Detect"}, {"from": "app", "to": "agents", "type": "imports", "evidence": "internal/app grep of internal/agents import"}, {"from": "app", "to": "components", "type": "imports", "evidence": "internal/app/app.go:16-17 import internal/components/opencodeplugin, internal/components/uninstall"}, {"from": "app", "to": "backup", "type": "imports", "evidence": "internal/app/app.go:14 import internal/backup"}, {"from": "app", "to": "model", "type": "imports", "evidence": "internal/app/app.go:18 import internal/model"}, {"from": "cli", "to": "planner", "type": "calls", "evidence": "internal/cli/run.go:129 planner.NewResolver(planner.MVPGraph()).Resolve(...); :136 planner.BuildReviewPayload(...)"}, {"from": "cli", "to": "system", "type": "calls", "evidence": "internal/cli/run.go:118 func RunInstall(args []string, detection system.DetectionResult)"}, {"from": "cli", "to": "reviewtransaction", "type": "calls", "evidence": "internal/cli/review_abandon.go and internal/cli/review_facade.go import internal/reviewtransaction (real non-test import)"}, {"from": "cli", "to": "sddstatus", "type": "calls", "evidence": "internal/app/app.go:91,95 cli.RunSDDStatus / cli.RunSDDAttempt dispatch into internal/cli, which imports internal/sddstatus"}, {"from": "cli", "to": "contracts_review_integration", "type": "reads", "evidence": "internal/cli/review_start_contract.go:13-17 schema ID constants pointing at contracts/review-integration/{v1,v2}/schemas/*.schema.json; internal/cli/review_transition_command_test.go:140 os.ReadFile of that path"}, {"from": "cli", "to": "agents", "type": "imports", "evidence": "internal/cli/run.go, internal/cli/sync.go import internal/agents"}, {"from": "cli", "to": "assets", "type": "imports", "evidence": "internal/cli/run.go imports internal/assets"}, {"from": "cli", "to": "model", "type": "imports", "evidence": "internal/cli/dryrun.go imports internal/model"}, {"from": "cli", "to": "catalog", "type": "imports", "evidence": "internal/cli/uninstall.go, internal/cli/validate.go import internal/catalog"}, {"from": "cli", "to": "components", "type": "imports", "evidence": "import scan: internal/cli -> internal/components (non-test)"}, {"from": "cli", "to": "backup", "type": "imports", "evidence": "import scan: internal/cli -> internal/backup (non-test)"}, {"from": "cli", "to": "pipeline", "type": "imports", "evidence": "import scan: internal/cli -> internal/pipeline (non-test)"}, {"from": "reviewtransaction", "to": "pathidentity", "type": "calls", "evidence": "grep -rl internal/pathidentity internal/reviewtransaction (non-test import)"}, {"from": "reviewtransaction", "to": "contracts_review_integration", "type": "reads", "evidence": "internal/reviewtransaction/targeted_validation_request.go:14 and authority_repair.go:21 schema ID constants referencing contracts/review-integration/v1/schemas/*.schema.json"}, {"from": "sddstatus", "to": "pathidentity", "type": "calls", "evidence": "grep -rl internal/pathidentity internal/sddstatus (non-test import)"}, {"from": "sddstatus", "to": "reviewtransaction", "type": "calls", "evidence": "internal/sddstatus/legacy_binding_read.go:25 func parseLegacyBinding(...) (reviewtransaction.SDDReceiptRef, error)"}, {"from": "components", "to": "agents", "type": "imports", "evidence": "import scan: internal/components -> internal/agents (non-test)"}, {"from": "components", "to": "assets", "type": "imports", "evidence": "import scan: internal/components -> internal/assets (non-test)"}, {"from": "components", "to": "catalog", "type": "imports", "evidence": "import scan: internal/components -> internal/catalog (non-test)"}, {"from": "components", "to": "model", "type": "imports", "evidence": "import scan: internal/components -> internal/model (non-test)"}, {"from": "components", "to": "backup", "type": "imports", "evidence": "import scan: internal/components -> internal/backup (non-test)"}, {"from": "components", "to": "reviewtransaction", "type": "calls", "evidence": "import scan: internal/components -> internal/reviewtransaction (non-test)"}, {"from": "components", "to": "system", "type": "imports", "evidence": "import scan: internal/components -> internal/system (non-test)"}, {"from": "agents", "to": "assets", "type": "imports", "evidence": "import scan: internal/agents -> internal/assets (non-test)"}, {"from": "agents", "to": "components", "type": "imports", "evidence": "import scan: internal/agents -> internal/components (non-test)"}, {"from": "agents", "to": "model", "type": "imports", "evidence": "import scan: internal/agents -> internal/model (non-test)"}, {"from": "agents", "to": "system", "type": "imports", "evidence": "import scan: internal/agents -> internal/system (non-test)"}, {"from": "agentbuilder", "to": "catalog", "type": "imports", "evidence": "import scan: internal/agentbuilder -> internal/catalog (non-test)"}, {"from": "agentbuilder", "to": "model", "type": "calls", "evidence": "internal/agentbuilder/engine.go:24 func NewEngine(agentID model.AgentID) GenerationEngine"}, {"from": "tui", "to": "agentbuilder", "type": "imports", "evidence": "import scan: internal/tui -> internal/agentbuilder (non-test)"}, {"from": "tui", "to": "backup", "type": "imports", "evidence": "import scan: internal/tui -> internal/backup (non-test)"}, {"from": "tui", "to": "catalog", "type": "imports", "evidence": "import scan: internal/tui -> internal/catalog (non-test)"}, {"from": "tui", "to": "components", "type": "imports", "evidence": "import scan: internal/tui -> internal/components (non-test)"}, {"from": "tui", "to": "model", "type": "imports", "evidence": "import scan: internal/tui -> internal/model (non-test)"}, {"from": "tui", "to": "pipeline", "type": "calls", "evidence": "import scan: internal/tui -> internal/pipeline (non-test); consumed via app.tuiExecute wiring"}, {"from": "tui", "to": "planner", "type": "imports", "evidence": "import scan: internal/tui -> internal/planner (non-test)"}, {"from": "tui", "to": "system", "type": "imports", "evidence": "import scan: internal/tui -> internal/system (non-test)"}, {"from": "tui", "to": "update", "type": "imports", "evidence": "import scan: internal/tui -> internal/update (non-test)"}, {"from": "update", "to": "agents", "type": "imports", "evidence": "import scan: internal/update -> internal/agents (non-test)"}, {"from": "update", "to": "assets", "type": "imports", "evidence": "import scan: internal/update -> internal/assets (non-test)"}, {"from": "update", "to": "backup", "type": "imports", "evidence": "import scan: internal/update -> internal/backup (non-test)"}, {"from": "update", "to": "cli", "type": "imports", "evidence": "import scan: internal/update -> internal/cli (non-test)"}, {"from": "update", "to": "components", "type": "imports", "evidence": "import scan: internal/update -> internal/components (non-test)"}, {"from": "update", "to": "model", "type": "imports", "evidence": "import scan: internal/update -> internal/model (non-test)"}, {"from": "update", "to": "pipeline", "type": "imports", "evidence": "import scan: internal/update -> internal/pipeline (non-test)"}, {"from": "update", "to": "planner", "type": "imports", "evidence": "import scan: internal/update -> internal/planner (non-test)"}, {"from": "update", "to": "system", "type": "imports", "evidence": "import scan: internal/update -> internal/system (non-test)"}, {"from": "planner", "to": "catalog", "type": "imports", "evidence": "import scan: internal/planner -> internal/catalog (non-test)"}, {"from": "planner", "to": "model", "type": "imports", "evidence": "import scan: internal/planner -> internal/model (non-test)"}, {"from": "planner", "to": "system", "type": "imports", "evidence": "import scan: internal/planner -> internal/system (non-test)"}, {"from": "catalog", "to": "components", "type": "imports", "evidence": "import scan: internal/catalog -> internal/components (non-test)"}, {"from": "catalog", "to": "model", "type": "imports", "evidence": "import scan: internal/catalog -> internal/model (non-test)"}, {"from": "assets", "to": "model", "type": "imports", "evidence": "import scan: internal/assets -> internal/model (non-test); internal/assets/commands.go:8 func SDDCommandsAssetDir(agent model.AgentID)"}, {"from": "backup", "to": "components", "type": "imports", "evidence": "import scan: internal/backup -> internal/components (non-test)"}], "flows": [{"trigger": "user runs `gentle-ai install <flags>`", "steps": ["cmd_gentle_ai", "app", "cli", "system", "planner", "components"], "outcome": "planner resolves the agent dependency graph and builds a review payload; cli.RunInstall stages writes via internal/components generators (or returns a dry-run plan) \u2014 evidenced by internal/cli/run.go:118-150 RunInstall body calling ParseInstallFlags, NormalizeInstallFlags(detection), planner.NewResolver(planner.MVPGraph()).Resolve, planner.BuildReviewPayload, buildStagePlan"}, {"trigger": "user runs `gentle-ai review start|finalize|...` (or a negotiated RDD transition)", "steps": ["cmd_gentle_ai", "app", "cli", "reviewtransaction", "contracts_review_integration"], "outcome": "an authoritative review receipt/transaction is created or advanced in the compact store, validated against the versioned JSON Schema contract \u2014 evidenced by internal/cli/review_facade.go:599 RunReview dispatch and internal/reviewtransaction/compact_store.go:898 CompactAuthoritativeStore; schema conformance via internal/cli/review_start_contract.go:13-17"}, {"trigger": "SDD status/attempt command binds a change to an approved review (`gentle-ai sdd-status`/`sdd-attempt`)", "steps": ["cmd_gentle_ai", "app", "cli", "sddstatus", "reviewtransaction"], "outcome": "sddstatus.BindApprovedReview reads/validates a reviewtransaction.SDDReceiptRef and records the binding \u2014 evidenced by internal/app/app.go:91,95 dispatch to cli.RunSDDStatus/RunSDDAttempt, internal/sddstatus/review_binding.go:54 BindApprovedReview, internal/sddstatus/legacy_binding_read.go:25"}, {"trigger": "user runs `gentle-ai upgrade [--dry-run] [tool...]`", "steps": ["cmd_gentle_ai", "app", "system", "update"], "outcome": "detected tools are checked and upgraded, producing an UpgradeReport rendered to stdout \u2014 evidenced by internal/app/app.go:444 func runUpgrade(ctx, args, detection system.DetectionResult, stdout); :486 upgrade.RenderUpgradeReport(report)"}, {"trigger": "user launches the interactive installer TUI (no/partial flags)", "steps": ["cmd_gentle_ai", "app", "tui", "pipeline", "planner"], "outcome": "tuiExecute drives internal/tui screens which run pipeline.Runner.Run over planner-resolved stages/steps with live progress \u2014 evidenced by internal/app/app.go:195 m.ExecuteFn = tuiExecute, :517 func tuiExecute(...), internal/pipeline/runner.go:14 func (r Runner) Run(stage Stage, steps []Step) StageResult"}], "columns": [{"name": "ENTRYPOINTS & TOOLING", "ids": ["cmd_gentle_ai", "tui", "agentbuilder", "backup"]}, {"name": "ORCHESTRATION & LIFECYCLE", "ids": ["app", "cli", "planner", "pipeline", "sddstatus", "update"]}, {"name": "DOMAIN & SHARED SERVICES", "ids": ["reviewtransaction", "components", "agents", "model", "system", "assets", "recoverytrace", "catalog", "pathidentity"]}, {"name": "EXTERNAL / SCHEMA CONTRACTS", "ids": ["contracts_review_integration"]}], "family_map": {"cmd_gentle_ai": "entrypoint", "tui": "entry-ui", "agentbuilder": "entry-ui", "backup": "entry-ui", "app": "core-control", "cli": "core-control", "planner": "core-control", "pipeline": "core-control", "sddstatus": "core-control", "update": "core-control", "reviewtransaction": "core-domain", "components": "core-domain", "agents": "core-domain", "model": "core-domain", "system": "core-domain", "assets": "core-domain", "recoverytrace": "core-domain", "catalog": "core-domain", "pathidentity": "core-domain", "contracts_review_integration": "schema"}, "family_labels": {"entrypoint": "Entrypoint", "entry-ui": "Entry / UI layer", "core-control": "Core \u2014 orchestration", "core-domain": "Core \u2014 domain / shared", "schema": "Schema / contract"}, "family_colors": {"entrypoint": "#f59e0b", "entry-ui": "#a78bfa", "core-control": "#22d3ee", "core-domain": "#34d399", "schema": "#94a3b8"}};
+
+const NODE_W = 200, NODE_H = 96, NODE_GAP = 16, COL_GAP = 48, COL_PAD_TOP = 38, COL_PAD_BOTTOM = 14, COL_PAD_X = 14;
+
+const nodesById = {};
+DATA.nodes.forEach(n => nodesById[n.id] = n);
+
+/* ---------- layout: compute column + node positions ---------- */
+const colLayout = [];
+let cursorX = 24;
+DATA.columns.forEach(col => {
+  const ids = col.ids;
+  const height = COL_PAD_TOP + ids.length * NODE_H + (ids.length - 1) * NODE_GAP + COL_PAD_BOTTOM;
+  colLayout.push({ name: col.name, ids, x: cursorX, width: NODE_W + COL_PAD_X * 2, height });
+  cursorX += NODE_W + COL_PAD_X * 2 + COL_GAP;
+});
+const nodePos = {};
+colLayout.forEach(col => {
+  col.ids.forEach((id, i) => {
+    nodePos[id] = {
+      x: col.x + COL_PAD_X,
+      y: 20 + COL_PAD_TOP + i * (NODE_H + NODE_GAP)
+    };
+  });
+});
+const stageWidth = cursorX + 24;
+const stageHeight = Math.max(...colLayout.map(c => c.height)) + 60;
+
+/* ---------- render header meta ---------- */
+document.getElementById('gen-meta').textContent =
+  `Generated ${DATA.generated_at} · commit ${DATA.generated_from_commit.slice(0,10)}`;
+
+/* ---------- render columns ---------- */
+const columnsLayer = document.getElementById('columns-layer');
+colLayout.forEach(col => {
+  const div = document.createElement('div');
+  div.className = 'column';
+  div.style.left = col.x + 'px';
+  div.style.width = col.width + 'px';
+  div.style.height = col.height + 'px';
+  const header = document.createElement('div');
+  header.className = 'column-header';
+  header.textContent = col.name;
+  div.appendChild(header);
+  columnsLayer.appendChild(div);
+});
+
+/* ---------- render nodes ---------- */
+const nodesLayer = document.getElementById('nodes-layer');
+const nodeEls = {};
+DATA.nodes.forEach(n => {
+  const pos = nodePos[n.id];
+  const fam = DATA.family_map[n.id];
+  const color = DATA.family_colors[fam];
+  const el = document.createElement('div');
+  el.className = 'node';
+  el.style.left = pos.x + 'px';
+  el.style.top = pos.y + 'px';
+  el.dataset.id = n.id;
+  el.dataset.family = fam;
+  el.innerHTML = `
+    <div class="badge" style="background:${color};">${escapeHtml(n.role)}</div>
+    <div class="title">${escapeHtml(n.id)}</div>
+    <div class="desc">${escapeHtml(truncate(n.constraints, 78))}</div>
+    <div class="path">${escapeHtml(n.path)}</div>
+  `;
+  el.addEventListener('click', (e) => { e.stopPropagation(); selectNode(n.id); });
+  nodesLayer.appendChild(el);
+  nodeEls[n.id] = el;
+});
+
+function truncate(s, len){ return s.length > len ? s.slice(0, len - 1) + '…' : s; }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- render edges (curved bezier between column-crossing points) ---------- */
+const svg = document.getElementById('edges');
+svg.setAttribute('width', stageWidth);
+svg.setAttribute('height', stageHeight);
+const edgeEls = {};
+DATA.edges.forEach((e, i) => {
+  const a = nodePos[e.from], b = nodePos[e.to];
+  if(!a || !b) return;
+  const ax = a.x + NODE_W, ay = a.y + NODE_H/2;
+  const bx = b.x, by = b.y + NODE_H/2;
+  const startX = bx > ax ? ax : a.x;
+  const endX = bx > ax ? bx : b.x + NODE_W;
+  const midX = (startX + endX) / 2;
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const d = `M ${startX} ${ay} C ${midX} ${ay}, ${midX} ${by}, ${endX} ${by}`;
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', '#2a3348');
+  path.setAttribute('stroke-width', '1.4');
+  path.setAttribute('opacity', '0.55');
+  path.dataset.from = e.from;
+  path.dataset.to = e.to;
+  path.dataset.idx = i;
+  svg.appendChild(path);
+  edgeEls[i] = path;
+});
+
+/* ---------- stage sizing ---------- */
+const stage = document.getElementById('stage');
+stage.style.width = stageWidth + 'px';
+stage.style.height = stageHeight + 'px';
+
+/* ---------- pan & zoom ---------- */
+const wrap = document.getElementById('canvas-wrap');
+let scale = 1, panX = 40, panY = 20;
+function applyTransform(){
+  stage.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+}
+function fitMap(){
+  const ww = wrap.clientWidth, wh = wrap.clientHeight;
+  const sx = ww / stageWidth, sy = wh / stageHeight;
+  scale = Math.min(sx, sy, 1) * 0.94;
+  panX = (ww - stageWidth * scale) / 2;
+  panY = (wh - stageHeight * scale) / 2;
+  applyTransform();
+}
+document.getElementById('zoom-in').addEventListener('click', () => { scale = Math.min(scale * 1.18, 3); applyTransform(); });
+document.getElementById('zoom-out').addEventListener('click', () => { scale = Math.max(scale / 1.18, 0.15); applyTransform(); });
+document.getElementById('fit-btn').addEventListener('click', fitMap);
+
+let dragging = false, dragStart = {x:0,y:0}, panStart = {x:0,y:0};
+wrap.addEventListener('mousedown', (e) => {
+  dragging = true; wrap.classList.add('panning');
+  dragStart = {x:e.clientX, y:e.clientY}; panStart = {x:panX, y:panY};
+});
+window.addEventListener('mousemove', (e) => {
+  if(!dragging) return;
+  panX = panStart.x + (e.clientX - dragStart.x);
+  panY = panStart.y + (e.clientY - dragStart.y);
+  applyTransform();
+});
+window.addEventListener('mouseup', () => { dragging = false; wrap.classList.remove('panning'); });
+wrap.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.92 : 1.08;
+  scale = Math.min(Math.max(scale * delta, 0.15), 3);
+  applyTransform();
+}, { passive:false });
+
+/* ---------- sidebar: legend ---------- */
+const legendList = document.getElementById('legend-list');
+Object.keys(DATA.family_labels).forEach(fam => {
+  const row = document.createElement('div');
+  row.className = 'legend-row';
+  row.innerHTML = `<span class="swatch" style="background:${DATA.family_colors[fam]};"></span> ${escapeHtml(DATA.family_labels[fam])}`;
+  legendList.appendChild(row);
+});
+
+/* ---------- sidebar: filters ---------- */
+const filterList = document.getElementById('filter-list');
+const activeFamilies = new Set(Object.keys(DATA.family_labels));
+Object.keys(DATA.family_labels).forEach(fam => {
+  const row = document.createElement('label');
+  row.className = 'filter-row';
+  row.innerHTML = `<input type="checkbox" checked data-fam="${fam}"><span class="swatch" style="background:${DATA.family_colors[fam]};"></span> ${escapeHtml(DATA.family_labels[fam])}`;
+  row.querySelector('input').addEventListener('change', (e) => {
+    if(e.target.checked) activeFamilies.add(fam); else activeFamilies.delete(fam);
+    applyFilters();
+  });
+  filterList.appendChild(row);
+});
+
+/* ---------- sidebar: flows ---------- */
+const flowList = document.getElementById('flow-list');
+let activeFlow = null;
+DATA.flows.forEach((f, i) => {
+  const row = document.createElement('div');
+  row.className = 'flow-row';
+  row.dataset.idx = i;
+  row.innerHTML = `<div class="ft">${escapeHtml(f.trigger)}</div><div class="fo">${escapeHtml(f.outcome)}</div>`;
+  row.addEventListener('click', () => selectFlow(i === activeFlow ? null : i));
+  flowList.appendChild(row);
+});
+
+/* ---------- search ---------- */
+let searchTerm = '';
+document.getElementById('search').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim().toLowerCase();
+  applyFilters();
+});
+
+function applyFilters(){
+  DATA.nodes.forEach(n => {
+    const fam = DATA.family_map[n.id];
+    const el = nodeEls[n.id];
+    const famOk = activeFamilies.has(fam);
+    const searchOk = !searchTerm ||
+      n.id.toLowerCase().includes(searchTerm) ||
+      n.role.toLowerCase().includes(searchTerm) ||
+      n.path.toLowerCase().includes(searchTerm);
+    el.classList.toggle('hidden', !(famOk && searchOk));
+  });
+}
+
+/* ---------- selection / focus logic ---------- */
+let selectedId = null;
+
+function selectNode(id){
+  activeFlow = null;
+  document.querySelectorAll('.flow-row').forEach(r => r.classList.remove('active'));
+  selectedId = id;
+  render();
+}
+
+function selectFlow(idx){
+  selectedId = null;
+  activeFlow = idx;
+  document.querySelectorAll('.flow-row').forEach(r => r.classList.toggle('active', Number(r.dataset.idx) === idx));
+  render();
+}
+
+document.getElementById('clear-btn').addEventListener('click', clearFocus);
+wrap.addEventListener('click', () => clearFocus());
+function clearFocus(){
+  selectedId = null; activeFlow = null;
+  document.querySelectorAll('.flow-row').forEach(r => r.classList.remove('active'));
+  render();
+}
+
+function render(){
+  // reset
+  Object.values(nodeEls).forEach(el => el.classList.remove('dim', 'selected'));
+  Object.values(edgeEls).forEach(el => {
+    el.setAttribute('stroke', '#2a3348');
+    el.setAttribute('stroke-width', '1.4');
+    el.setAttribute('opacity', '0.55');
+  });
+  const statusPill = document.getElementById('status-pill');
+  statusPill.style.display = 'none';
+  document.getElementById('sel-empty').style.display = 'block';
+  document.getElementById('sel-content').style.display = 'none';
+
+  if(selectedId){
+    const upstream = DATA.edges.filter(e => e.to === selectedId);
+    const downstream = DATA.edges.filter(e => e.from === selectedId);
+    const related = new Set([selectedId]);
+    upstream.forEach(e => related.add(e.from));
+    downstream.forEach(e => related.add(e.to));
+
+    Object.entries(nodeEls).forEach(([id, el]) => {
+      if(!related.has(id)) el.classList.add('dim');
+    });
+    nodeEls[selectedId].classList.add('selected');
+
+    DATA.edges.forEach((e, i) => {
+      const el = edgeEls[i];
+      if(e.to === selectedId){
+        el.setAttribute('stroke', 'var(--up)'); el.setAttribute('stroke-width','2.2'); el.setAttribute('opacity','0.95');
+      } else if(e.from === selectedId){
+        el.setAttribute('stroke', 'var(--down)'); el.setAttribute('stroke-width','2.2'); el.setAttribute('opacity','0.95');
+      } else {
+        el.setAttribute('opacity', '0.08');
+      }
+    });
+
+    statusPill.style.display = 'block';
+    statusPill.innerHTML = `<b>${escapeHtml(selectedId)}</b> · <span class="u">${upstream.length} upstream</span> · <span class="d">${downstream.length} downstream</span>`;
+
+    renderSelectionPanel(selectedId);
+  } else if(activeFlow !== null){
+    const flow = DATA.flows[activeFlow];
+    const steps = flow.steps;
+    const stepSet = new Set(steps);
+    Object.entries(nodeEls).forEach(([id, el]) => {
+      if(!stepSet.has(id)) el.classList.add('dim');
+    });
+    const flowEdgeIdx = new Set();
+    for(let i = 0; i < steps.length - 1; i++){
+      const from = steps[i], to = steps[i+1];
+      const idx = DATA.edges.findIndex(e => e.from === from && e.to === to);
+      if(idx >= 0) flowEdgeIdx.add(idx);
+    }
+    DATA.edges.forEach((e, i) => {
+      const el = edgeEls[i];
+      if(flowEdgeIdx.has(i)){
+        el.setAttribute('stroke', 'var(--flow)'); el.setAttribute('stroke-width','2.6'); el.setAttribute('opacity','1');
+      } else {
+        el.setAttribute('opacity', '0.06');
+      }
+    });
+    statusPill.style.display = 'block';
+    statusPill.innerHTML = `<span style="color:var(--flow);font-weight:700;">flow</span> · ${escapeHtml(flow.trigger)}`;
+  }
+}
+
+function renderSelectionPanel(id){
+  const n = nodesById[id];
+  document.getElementById('sel-empty').style.display = 'none';
+  document.getElementById('sel-content').style.display = 'block';
+  document.getElementById('sel-name').textContent = n.id;
+  document.getElementById('sel-desc').textContent = n.constraints;
+  document.getElementById('sel-path').textContent = n.path;
+
+  const epEl = document.getElementById('sel-entrypoints');
+  epEl.innerHTML = n.entrypoints.length
+    ? n.entrypoints.map(e => `<span class="pill">${escapeHtml(e)}</span>`).join('')
+    : `<span class="pill" style="opacity:.5;">none</span>`;
+
+  const testsEl = document.getElementById('sel-tests');
+  testsEl.innerHTML = n.tests.length
+    ? n.tests.map(t => `<span class="pill">${escapeHtml(t)}</span>`).join('')
+    : `<span class="pill" style="opacity:.5;">none</span>`;
+
+  const consEl = document.getElementById('sel-constraints');
+  consEl.innerHTML = `<span class="pill">${escapeHtml(n.constraints)}</span>`;
+
+  const flowsForNode = DATA.flows.filter(f => f.steps.includes(id));
+  const flowsEl = document.getElementById('sel-flows');
+  flowsEl.innerHTML = flowsForNode.length
+    ? flowsForNode.map(f => `<span class="pill flow-pill">${escapeHtml(f.trigger)}</span>`).join('')
+    : `<span class="pill" style="opacity:.5;">none</span>`;
+
+  const evEl = document.getElementById('sel-evidence');
+  const relatedEdges = DATA.edges.filter(e => e.from === id || e.to === id);
+  const evidences = [n.evidence, ...relatedEdges.map(e => `[${e.type}] ${e.from} → ${e.to}: ${e.evidence}`)];
+  evEl.innerHTML = evidences.map(ev => `<div class="evidence-line">${escapeHtml(ev)}</div>`).join('');
+}
+
+/* prevent canvas-click-to-clear from firing when clicking sidebars */
+document.getElementById('left').addEventListener('click', e => e.stopPropagation());
+document.getElementById('right').addEventListener('click', e => e.stopPropagation());
+document.querySelector('header').addEventListener('click', e => e.stopPropagation());
+
+/* initial paint */
+render();
+window.addEventListener('resize', fitMap);
+requestAnimationFrame(fitMap);
+</script>
+</body>
+</html>

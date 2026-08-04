@@ -1,0 +1,302 @@
+{
+  "generated_at": "2026-08-04T23:05:05Z",
+  "generated_from_commit": "4398f3476899aa043b89242eebfc260429aab2e3",
+  "scope": [
+    "cmd/gentle-ai",
+    "internal/app",
+    "internal/cli",
+    "internal/reviewtransaction",
+    "internal/components",
+    "internal/tui",
+    "internal/agents",
+    "internal/sddstatus",
+    "internal/update",
+    "internal/model",
+    "internal/system",
+    "internal/assets",
+    "internal/agentbuilder",
+    "internal/recoverytrace",
+    "internal/backup",
+    "internal/planner",
+    "internal/pipeline",
+    "internal/catalog",
+    "internal/pathidentity",
+    "contracts/review-integration"
+  ],
+  "nodes": [
+    {
+      "id": "cmd_gentle_ai",
+      "path": "cmd/gentle-ai/main.go",
+      "role": "entrypoint",
+      "entrypoints": ["main"],
+      "tests": [],
+      "constraints": "sole compiled CLI binary; ldflags inject version",
+      "evidence": "cmd/gentle-ai/main.go:13 func main() calls app.ResolveVersion and app.Run()"
+    },
+    {
+      "id": "app",
+      "path": "internal/app",
+      "role": "core-orchestrator",
+      "entrypoints": ["Run", "RunArgs", "runUpgrade", "tuiExecute"],
+      "tests": ["internal/app/app_test.go", "internal/app/help_test.go", "internal/app/parity_test.go", "internal/app/selfupdate_test.go", "internal/app/update_test.go", "internal/app/upgrade_test.go", "internal/app/version_test.go"],
+      "constraints": "top-level CLI argument dispatcher; wires cli/tui/update/planner/pipeline/system together",
+      "evidence": "internal/app/app.go:59 func Run(); :63 func RunArgs(...); :234 calls cli.RunInstall; :444 func runUpgrade(...); :517 func tuiExecute(...)"
+    },
+    {
+      "id": "cli",
+      "path": "internal/cli",
+      "role": "core-command-facade",
+      "entrypoints": ["RunInstall", "RunSync", "RunReview", "RunDoctor", "RunSDDStatus", "RunSDDAttempt"],
+      "tests": ["internal/cli/*_test.go (177 files)"],
+      "constraints": "largest package (246 files); owns installer flags, review facade, SDD status commands",
+      "evidence": "internal/cli/run.go:118 func RunInstall(...); internal/cli/review_facade.go:599 func RunReview(...); internal/cli/sync.go func RunSync; internal/cli/doctor.go func RunDoctor"
+    },
+    {
+      "id": "reviewtransaction",
+      "path": "internal/reviewtransaction",
+      "role": "core-domain-engine",
+      "entrypoints": ["CompactAuthoritativeStore", "Load"],
+      "tests": ["internal/reviewtransaction/*_test.go (110 files)"],
+      "constraints": "bounded native code-review (RDD) receipt/authority engine; 210 files, second largest package",
+      "evidence": "internal/reviewtransaction/compact_store.go:898 func CompactAuthoritativeStore(ctx, repo, lineageID) (CompactStore, error)"
+    },
+    {
+      "id": "components",
+      "path": "internal/components",
+      "role": "core-asset-writers",
+      "entrypoints": ["mutationjournal.New"],
+      "tests": ["internal/components/**/*_test.go (63 files)"],
+      "constraints": "hub of installer-time file writers/generators (mutationjournal, sdd, gga, mcp, persona, permissions, theme, uninstall, engram, filemerge, agentguidance, communitytool, opencodedefault, opencodeplugin, skills subpackages)",
+      "evidence": "internal/components/mutationjournal/journal.go:50 func New(roots ...string) *Journal"
+    },
+    {
+      "id": "tui",
+      "path": "internal/tui",
+      "role": "entry-interactive-ui",
+      "entrypoints": ["screens.NewModelPickerState"],
+      "tests": ["internal/tui/**/*_test.go (39 files)"],
+      "constraints": "Bubbletea-based interactive install/upgrade UI; entry layer (only outbound calls)",
+      "evidence": "internal/tui/screens/model_picker.go:98 func NewModelPickerState(cachePath, settingsPath string) ModelPickerState; internal/app/app.go:195 m.ExecuteFn = tuiExecute"
+    },
+    {
+      "id": "agents",
+      "path": "internal/agents",
+      "role": "core-agent-registry",
+      "entrypoints": ["DiscoverInstalled", "ResolveCapabilityManifest", "ConfigRootsForBackup"],
+      "tests": ["internal/agents/*_test.go (24 files)"],
+      "constraints": "high fan-in core package modeling supported agent runtimes and their capabilities",
+      "evidence": "internal/agents/discovery.go:26 func DiscoverInstalled(reg *Registry, homeDir string) []InstalledAgent; internal/agents/capability_manifest.go:43 func ResolveCapabilityManifest(adapter Adapter)"
+    },
+    {
+      "id": "sddstatus",
+      "path": "internal/sddstatus",
+      "role": "core-sdd-lifecycle",
+      "entrypoints": ["BindApprovedReview"],
+      "tests": ["internal/sddstatus/*_test.go (36 files)"],
+      "constraints": "binds SDD change lifecycle state to an approved review receipt; depends on reviewtransaction + pathidentity",
+      "evidence": "internal/sddstatus/review_binding.go:54 func BindApprovedReview(ctx, repo, change, lineage, expected string) (ReviewBinding, error); internal/sddstatus/legacy_binding_read.go:25 references reviewtransaction.SDDReceiptRef"
+    },
+    {
+      "id": "update",
+      "path": "internal/update",
+      "role": "core-self-update",
+      "entrypoints": ["CheckAll", "CheckFiltered", "upgrade.Execute", "upgrade.ExecuteWithOptions"],
+      "tests": ["internal/update/**/*_test.go (20 files)"],
+      "constraints": "self-update / tool-update flow; includes internal/update/upgrade subpackage (collapsed here per 20-node cap)",
+      "evidence": "internal/app/app.go:34-37 updateCheckAll = update.CheckAll; updateCheckFiltered = update.CheckFiltered; upgradeExecute = upgrade.Execute (internal/update/upgrade); :26 import internal/update/upgrade"
+    },
+    {
+      "id": "model",
+      "path": "internal/model",
+      "role": "core-model-catalog",
+      "entrypoints": ["ClaudeEffortsForModel", "ClaudeEffortAllowedForModel", "ModelCapability"],
+      "tests": ["internal/model/*_test.go (10 files)"],
+      "constraints": "high fan-in core package: model/effort identifiers shared across almost all other packages",
+      "evidence": "internal/model/claude_model.go:72 func ClaudeEffortsForModel(alias ClaudeModelAlias) []ClaudeEffort; internal/model/capability.go:7 func ModelCapability(modelID string) string"
+    },
+    {
+      "id": "system",
+      "path": "internal/system",
+      "role": "core-environment-detection",
+      "entrypoints": ["Detect", "DetectDependencies", "DetectTools"],
+      "tests": ["internal/system/*_test.go (9 files)"],
+      "constraints": "OS/tool/dependency detection consumed by cli.RunInstall and app.runUpgrade",
+      "evidence": "internal/system/detect.go:80 func Detect(ctx context.Context) (DetectionResult, error)"
+    },
+    {
+      "id": "assets",
+      "path": "internal/assets",
+      "role": "core-embedded-assets",
+      "entrypoints": ["MustRead", "Read", "SDDCommandsAssetDir"],
+      "tests": ["internal/assets/*_test.go (12 files)"],
+      "constraints": "embedded skill/command/asset text read by installer and components",
+      "evidence": "internal/assets/assets.go:9 func MustRead(path string) string; :18 func Read(path string) (string, error)"
+    },
+    {
+      "id": "agentbuilder",
+      "path": "internal/agentbuilder",
+      "role": "entry-agent-generation",
+      "entrypoints": ["NewEngine"],
+      "tests": ["internal/agentbuilder/*_test.go (7 files)"],
+      "constraints": "generation-engine wrapper per agent runtime (Claude/OpenCode); entry layer, only outbound calls",
+      "evidence": "internal/agentbuilder/engine.go:24 func NewEngine(agentID model.AgentID) GenerationEngine"
+    },
+    {
+      "id": "recoverytrace",
+      "path": "internal/recoverytrace",
+      "role": "core-recovery-diagnostics",
+      "entrypoints": ["RecoveryRows"],
+      "tests": ["internal/recoverytrace/*_test.go (5 files)"],
+      "constraints": "high fan-in per CBM architecture summary (90 inbound); renders recovery/incident rows for tui and cli",
+      "evidence": "internal/recoverytrace/rows.go:83 func RecoveryRows() []Row"
+    },
+    {
+      "id": "backup",
+      "path": "internal/backup",
+      "role": "entry-backup-restore",
+      "entrypoints": ["CreateArchive", "ExtractArchive"],
+      "tests": ["internal/backup/*_test.go (5 files)"],
+      "constraints": "tar-based config backup/restore; entry layer, only outbound calls",
+      "evidence": "internal/backup/compression.go:29 func CreateArchive(archivePath string, entries []ArchiveEntry) error; :91 func ExtractArchive(...)"
+    },
+    {
+      "id": "planner",
+      "path": "internal/planner",
+      "role": "core-dependency-resolver",
+      "entrypoints": ["NewResolver", "MVPGraph", "BuildReviewPayload"],
+      "tests": ["internal/planner/*_test.go (3 files)"],
+      "constraints": "resolves the installable-agent dependency graph for a selection and builds the review payload for confirmation",
+      "evidence": "internal/cli/run.go:129 planner.NewResolver(planner.MVPGraph()).Resolve(input.Selection); :136 review := planner.BuildReviewPayload(input.Selection, resolved)"
+    },
+    {
+      "id": "pipeline",
+      "path": "internal/pipeline",
+      "role": "core-stage-runner",
+      "entrypoints": ["Runner.Run"],
+      "tests": ["internal/pipeline/*_test.go (1 file)"],
+      "constraints": "executes ordered install/upgrade Stage/Step sequences with progress events; used by app.tuiExecute and tui",
+      "evidence": "internal/pipeline/runner.go:14 func (r Runner) Run(stage Stage, steps []Step) StageResult"
+    },
+    {
+      "id": "catalog",
+      "path": "internal/catalog",
+      "role": "core-agent-catalog",
+      "entrypoints": ["AllAgents", "MVPAgents", "IsMVPAgent"],
+      "tests": ["internal/catalog/*_test.go (2 files)"],
+      "constraints": "static registry of supported agent identities consumed by planner/cli/agentbuilder",
+      "evidence": "internal/catalog/agents.go:37 func AllAgents() []Agent; :43 func MVPAgents() []Agent"
+    },
+    {
+      "id": "pathidentity",
+      "path": "internal/pathidentity",
+      "role": "core-path-utility",
+      "entrypoints": ["Contains"],
+      "tests": ["internal/pathidentity/identity_test.go"],
+      "constraints": "small (2 files) but very high call-site fan-in per CBM hotspots (1684, mostly from tests); real non-test importers are only reviewtransaction and sddstatus",
+      "evidence": "internal/pathidentity/identity.go:83 func Contains(root, path string) bool; grep -rl \"internal/pathidentity\" internal --include=*.go (non-test) -> internal/reviewtransaction, internal/sddstatus, internal/releasepolicy"
+    },
+    {
+      "id": "contracts_review_integration",
+      "path": "contracts/review-integration",
+      "role": "schema-contract",
+      "entrypoints": [],
+      "tests": ["internal/cli/review_schema_test.go", "internal/cli/review_transition_command_test.go", "internal/cli/review_status_contract_test.go", "internal/cli/review_consent_relay_test.go"],
+      "constraints": "JSON Schema + fixtures for the review-receipt contract, versioned v1/v2; not Go code, treated as schema node",
+      "evidence": "internal/cli/review_transition_command_test.go:140 os.ReadFile(filepath.Join(\"..\",\"..\",\"contracts\",\"review-integration\",\"v1\",\"schemas\",schemaFile)); internal/cli/review_start_contract.go:17 const ReviewIntegrationStartSchemaID = \".../contracts/review-integration/v2/schemas/start.schema.json\""
+    }
+  ],
+  "edges": [
+    { "from": "cmd_gentle_ai", "to": "app", "type": "calls", "evidence": "cmd/gentle-ai/main.go:14-16 calls app.Run()" },
+    { "from": "app", "to": "cli", "type": "calls", "evidence": "internal/app/app.go:234 cli.RunInstall(args[1:], result); imports internal/cli" },
+    { "from": "app", "to": "planner", "type": "imports", "evidence": "internal/app/app.go:20 import internal/planner" },
+    { "from": "app", "to": "pipeline", "type": "imports", "evidence": "internal/app/app.go:19 import internal/pipeline" },
+    { "from": "app", "to": "tui", "type": "calls", "evidence": "internal/app/app.go:195 m.ExecuteFn = tuiExecute; :24 import internal/tui" },
+    { "from": "app", "to": "update", "type": "calls", "evidence": "internal/app/app.go:34-37 updateCheckAll = update.CheckAll; upgradeExecute = upgrade.Execute (internal/update/upgrade)" },
+    { "from": "app", "to": "system", "type": "calls", "evidence": "internal/app/app.go:40 detectSystem = system.Detect" },
+    { "from": "app", "to": "agents", "type": "imports", "evidence": "internal/app grep of internal/agents import" },
+    { "from": "app", "to": "components", "type": "imports", "evidence": "internal/app/app.go:16-17 import internal/components/opencodeplugin, internal/components/uninstall" },
+    { "from": "app", "to": "backup", "type": "imports", "evidence": "internal/app/app.go:14 import internal/backup" },
+    { "from": "app", "to": "model", "type": "imports", "evidence": "internal/app/app.go:18 import internal/model" },
+    { "from": "cli", "to": "planner", "type": "calls", "evidence": "internal/cli/run.go:129 planner.NewResolver(planner.MVPGraph()).Resolve(...); :136 planner.BuildReviewPayload(...)" },
+    { "from": "cli", "to": "system", "type": "calls", "evidence": "internal/cli/run.go:118 func RunInstall(args []string, detection system.DetectionResult)" },
+    { "from": "cli", "to": "reviewtransaction", "type": "calls", "evidence": "internal/cli/review_abandon.go and internal/cli/review_facade.go import internal/reviewtransaction (real non-test import)" },
+    { "from": "cli", "to": "sddstatus", "type": "calls", "evidence": "internal/app/app.go:91,95 cli.RunSDDStatus / cli.RunSDDAttempt dispatch into internal/cli, which imports internal/sddstatus" },
+    { "from": "cli", "to": "contracts_review_integration", "type": "reads", "evidence": "internal/cli/review_start_contract.go:13-17 schema ID constants pointing at contracts/review-integration/{v1,v2}/schemas/*.schema.json; internal/cli/review_transition_command_test.go:140 os.ReadFile of that path" },
+    { "from": "cli", "to": "agents", "type": "imports", "evidence": "internal/cli/run.go, internal/cli/sync.go import internal/agents" },
+    { "from": "cli", "to": "assets", "type": "imports", "evidence": "internal/cli/run.go imports internal/assets" },
+    { "from": "cli", "to": "model", "type": "imports", "evidence": "internal/cli/dryrun.go imports internal/model" },
+    { "from": "cli", "to": "catalog", "type": "imports", "evidence": "internal/cli/uninstall.go, internal/cli/validate.go import internal/catalog" },
+    { "from": "cli", "to": "components", "type": "imports", "evidence": "import scan: internal/cli -> internal/components (non-test)" },
+    { "from": "cli", "to": "backup", "type": "imports", "evidence": "import scan: internal/cli -> internal/backup (non-test)" },
+    { "from": "cli", "to": "pipeline", "type": "imports", "evidence": "import scan: internal/cli -> internal/pipeline (non-test)" },
+    { "from": "reviewtransaction", "to": "pathidentity", "type": "calls", "evidence": "grep -rl internal/pathidentity internal/reviewtransaction (non-test import)" },
+    { "from": "reviewtransaction", "to": "contracts_review_integration", "type": "reads", "evidence": "internal/reviewtransaction/targeted_validation_request.go:14 and authority_repair.go:21 schema ID constants referencing contracts/review-integration/v1/schemas/*.schema.json" },
+    { "from": "sddstatus", "to": "pathidentity", "type": "calls", "evidence": "grep -rl internal/pathidentity internal/sddstatus (non-test import)" },
+    { "from": "sddstatus", "to": "reviewtransaction", "type": "calls", "evidence": "internal/sddstatus/legacy_binding_read.go:25 func parseLegacyBinding(...) (reviewtransaction.SDDReceiptRef, error)" },
+    { "from": "components", "to": "agents", "type": "imports", "evidence": "import scan: internal/components -> internal/agents (non-test)" },
+    { "from": "components", "to": "assets", "type": "imports", "evidence": "import scan: internal/components -> internal/assets (non-test)" },
+    { "from": "components", "to": "catalog", "type": "imports", "evidence": "import scan: internal/components -> internal/catalog (non-test)" },
+    { "from": "components", "to": "model", "type": "imports", "evidence": "import scan: internal/components -> internal/model (non-test)" },
+    { "from": "components", "to": "backup", "type": "imports", "evidence": "import scan: internal/components -> internal/backup (non-test)" },
+    { "from": "components", "to": "reviewtransaction", "type": "calls", "evidence": "import scan: internal/components -> internal/reviewtransaction (non-test)" },
+    { "from": "components", "to": "system", "type": "imports", "evidence": "import scan: internal/components -> internal/system (non-test)" },
+    { "from": "agents", "to": "assets", "type": "imports", "evidence": "import scan: internal/agents -> internal/assets (non-test)" },
+    { "from": "agents", "to": "components", "type": "imports", "evidence": "import scan: internal/agents -> internal/components (non-test)" },
+    { "from": "agents", "to": "model", "type": "imports", "evidence": "import scan: internal/agents -> internal/model (non-test)" },
+    { "from": "agents", "to": "system", "type": "imports", "evidence": "import scan: internal/agents -> internal/system (non-test)" },
+    { "from": "agentbuilder", "to": "catalog", "type": "imports", "evidence": "import scan: internal/agentbuilder -> internal/catalog (non-test)" },
+    { "from": "agentbuilder", "to": "model", "type": "calls", "evidence": "internal/agentbuilder/engine.go:24 func NewEngine(agentID model.AgentID) GenerationEngine" },
+    { "from": "tui", "to": "agentbuilder", "type": "imports", "evidence": "import scan: internal/tui -> internal/agentbuilder (non-test)" },
+    { "from": "tui", "to": "backup", "type": "imports", "evidence": "import scan: internal/tui -> internal/backup (non-test)" },
+    { "from": "tui", "to": "catalog", "type": "imports", "evidence": "import scan: internal/tui -> internal/catalog (non-test)" },
+    { "from": "tui", "to": "components", "type": "imports", "evidence": "import scan: internal/tui -> internal/components (non-test)" },
+    { "from": "tui", "to": "model", "type": "imports", "evidence": "import scan: internal/tui -> internal/model (non-test)" },
+    { "from": "tui", "to": "pipeline", "type": "calls", "evidence": "import scan: internal/tui -> internal/pipeline (non-test); consumed via app.tuiExecute wiring" },
+    { "from": "tui", "to": "planner", "type": "imports", "evidence": "import scan: internal/tui -> internal/planner (non-test)" },
+    { "from": "tui", "to": "system", "type": "imports", "evidence": "import scan: internal/tui -> internal/system (non-test)" },
+    { "from": "tui", "to": "update", "type": "imports", "evidence": "import scan: internal/tui -> internal/update (non-test)" },
+    { "from": "update", "to": "agents", "type": "imports", "evidence": "import scan: internal/update -> internal/agents (non-test)" },
+    { "from": "update", "to": "assets", "type": "imports", "evidence": "import scan: internal/update -> internal/assets (non-test)" },
+    { "from": "update", "to": "backup", "type": "imports", "evidence": "import scan: internal/update -> internal/backup (non-test)" },
+    { "from": "update", "to": "cli", "type": "imports", "evidence": "import scan: internal/update -> internal/cli (non-test)" },
+    { "from": "update", "to": "components", "type": "imports", "evidence": "import scan: internal/update -> internal/components (non-test)" },
+    { "from": "update", "to": "model", "type": "imports", "evidence": "import scan: internal/update -> internal/model (non-test)" },
+    { "from": "update", "to": "pipeline", "type": "imports", "evidence": "import scan: internal/update -> internal/pipeline (non-test)" },
+    { "from": "update", "to": "planner", "type": "imports", "evidence": "import scan: internal/update -> internal/planner (non-test)" },
+    { "from": "update", "to": "system", "type": "imports", "evidence": "import scan: internal/update -> internal/system (non-test)" },
+    { "from": "planner", "to": "catalog", "type": "imports", "evidence": "import scan: internal/planner -> internal/catalog (non-test)" },
+    { "from": "planner", "to": "model", "type": "imports", "evidence": "import scan: internal/planner -> internal/model (non-test)" },
+    { "from": "planner", "to": "system", "type": "imports", "evidence": "import scan: internal/planner -> internal/system (non-test)" },
+    { "from": "catalog", "to": "components", "type": "imports", "evidence": "import scan: internal/catalog -> internal/components (non-test)" },
+    { "from": "catalog", "to": "model", "type": "imports", "evidence": "import scan: internal/catalog -> internal/model (non-test)" },
+    { "from": "assets", "to": "model", "type": "imports", "evidence": "import scan: internal/assets -> internal/model (non-test); internal/assets/commands.go:8 func SDDCommandsAssetDir(agent model.AgentID)" },
+    { "from": "backup", "to": "components", "type": "imports", "evidence": "import scan: internal/backup -> internal/components (non-test)" }
+  ],
+  "flows": [
+    {
+      "trigger": "user runs `gentle-ai install <flags>`",
+      "steps": ["cmd_gentle_ai", "app", "cli", "system", "planner", "components"],
+      "outcome": "planner resolves the agent dependency graph and builds a review payload; cli.RunInstall stages writes via internal/components generators (or returns a dry-run plan) — evidenced by internal/cli/run.go:118-150 RunInstall body calling ParseInstallFlags, NormalizeInstallFlags(detection), planner.NewResolver(planner.MVPGraph()).Resolve, planner.BuildReviewPayload, buildStagePlan"
+    },
+    {
+      "trigger": "user runs `gentle-ai review start|finalize|...` (or a negotiated RDD transition)",
+      "steps": ["cmd_gentle_ai", "app", "cli", "reviewtransaction", "contracts_review_integration"],
+      "outcome": "an authoritative review receipt/transaction is created or advanced in the compact store, validated against the versioned JSON Schema contract — evidenced by internal/cli/review_facade.go:599 RunReview dispatch and internal/reviewtransaction/compact_store.go:898 CompactAuthoritativeStore; schema conformance via internal/cli/review_start_contract.go:13-17"
+    },
+    {
+      "trigger": "SDD status/attempt command binds a change to an approved review (`gentle-ai sdd-status`/`sdd-attempt`)",
+      "steps": ["cmd_gentle_ai", "app", "cli", "sddstatus", "reviewtransaction"],
+      "outcome": "sddstatus.BindApprovedReview reads/validates a reviewtransaction.SDDReceiptRef and records the binding — evidenced by internal/app/app.go:91,95 dispatch to cli.RunSDDStatus/RunSDDAttempt, internal/sddstatus/review_binding.go:54 BindApprovedReview, internal/sddstatus/legacy_binding_read.go:25"
+    },
+    {
+      "trigger": "user runs `gentle-ai upgrade [--dry-run] [tool...]`",
+      "steps": ["cmd_gentle_ai", "app", "system", "update"],
+      "outcome": "detected tools are checked and upgraded, producing an UpgradeReport rendered to stdout — evidenced by internal/app/app.go:444 func runUpgrade(ctx, args, detection system.DetectionResult, stdout); :486 upgrade.RenderUpgradeReport(report)"
+    },
+    {
+      "trigger": "user launches the interactive installer TUI (no/partial flags)",
+      "steps": ["cmd_gentle_ai", "app", "tui", "pipeline", "planner"],
+      "outcome": "tuiExecute drives internal/tui screens which run pipeline.Runner.Run over planner-resolved stages/steps with live progress — evidenced by internal/app/app.go:195 m.ExecuteFn = tuiExecute, :517 func tuiExecute(...), internal/pipeline/runner.go:14 func (r Runner) Run(stage Stage, steps []Step) StageResult"
+    }
+  ]
+}
