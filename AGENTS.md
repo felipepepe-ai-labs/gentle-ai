@@ -22,3 +22,6 @@ Naming convention: `gentle-ai-*` skills are repo-specific workflow skills. Unpre
 | `comment-writer` | When drafting human comments, PR feedback, issue replies, or async updates. | [`skills/comment-writer/SKILL.md`](skills/comment-writer/SKILL.md) |
 | `work-unit-commits` | When splitting implementation work into deliverable commits or chained PRs. | [`skills/work-unit-commits/SKILL.md`](skills/work-unit-commits/SKILL.md) |
 | `rdd-defect-workflow` | When RDD defects involve receipts, authority, recovery, delivery gates, or kill switches. | [`skills/rdd-defect-workflow/SKILL.md`](skills/rdd-defect-workflow/SKILL.md) |
+| `session-start` | At the start of a session in a project, or on explicit `/session-start`, to gather functional/technical context from CBM, Engram, and docs. | [`skills/session-start/SKILL.md`](skills/session-start/SKILL.md) |
+| `session-end` | Before concluding a session, or on explicit `/session-end`, to persist the session summary to Engram and refresh the CBM index if code changed. | [`skills/session-end/SKILL.md`](skills/session-end/SKILL.md) |
+| `codemap` | When asked to map, chart, or document the codebase architecture as an interactive artifact under `docs/codemap/`. | [`skills/codemap/SKILL.md`](skills/codemap/SKILL.md) |
