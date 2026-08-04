@@ -1,0 +1,138 @@
+name: Windows Release (Unsigned)
+
+# ============================================================================
+# WARNING — INTENTIONAL DEVIATION FROM UPSTREAM RELEASE POLICY
+#
+# docs/release-signing.md ("Windows distribution restoration gate") and
+# scripts/verify-release-distribution-policy.sh document and enforce that
+# gentle-ai does NOT publish official Windows executables until they are
+# signed with a publicly trusted Authenticode certificate. That gate exists
+# so Windows users never download an unsigned binary or run a remote update
+# script against one.
+#
+# This workflow deliberately bypasses that gate for this fork. It attaches
+# UNSIGNED windows/amd64 and windows/arm64 binaries to the same GitHub
+# Release that the main "Release" workflow publishes (signed macOS/Linux
+# archives only). Every asset here is named and labeled "UNSIGNED" so this
+# can never be mistaken for a signed, policy-compliant release artifact.
+# Do not remove the UNSIGNED marker from filenames or the release note append.
+# ============================================================================
+
+on:
+  # Matches by the *name:* of the release.yml workflow ("Release"), not its
+  # filename. If that name ever changes, update the string below too.
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach unsigned Windows assets to (e.g. v2.3.0)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.event.workflow_run.head_branch || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-attach:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
+          # GoReleaser's {{ .Version }} (used in main.version and archive names
+          # for the macOS/Linux builds) drops the leading "v" from the tag.
+          # Match that convention here so the Windows version string and
+          # filename stay consistent with the signed assets in this release.
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ steps.tag.outputs.value }}
+          fetch-depth: 0
+
+      - name: Verify the resolved tag is an existing GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${{ steps.tag.outputs.value }}" --repo "${{ github.repository }}" >/dev/null
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build unsigned windows/amd64 and windows/arm64 binaries
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($arch in @("amd64", "arm64")) {
+            $env:GOOS = "windows"
+            $env:GOARCH = $arch
+            $env:CGO_ENABLED = "0"
+            $out = "dist/windows_$arch/gentle-ai.exe"
+            New-Item -ItemType Directory -Force -Path "dist/windows_$arch" | Out-Null
+            go build -trimpath -ldflags "-s -w -X main.version=$env:VERSION" -o $out ./cmd/gentle-ai
+          }
+
+      - name: Package UNSIGNED archives
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($arch in @("amd64", "arm64")) {
+            $stage = "dist/gentle-ai_${env:VERSION}_windows_${arch}_UNSIGNED"
+            New-Item -ItemType Directory -Force -Path $stage | Out-Null
+            Copy-Item "dist/windows_$arch/gentle-ai.exe" "$stage/gentle-ai.exe"
+            Copy-Item "LICENSE" "$stage/LICENSE"
+            Copy-Item "README.md" "$stage/README.md"
+            Compress-Archive -Path "$stage/*" -DestinationPath "dist/gentle-ai_${env:VERSION}_windows_${arch}_UNSIGNED.zip" -Force
+          }
+          Get-FileHash dist/*_UNSIGNED.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Path "dist/checksums-windows-UNSIGNED.txt"
+
+      - name: Upload UNSIGNED assets to the existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.tag.outputs.value }}" \
+            dist/gentle-ai_*_windows_*_UNSIGNED.zip \
+            dist/checksums-windows-UNSIGNED.txt \
+            --repo "${{ github.repository }}" --clobber
+
+      - name: Append unsigned-asset warning to release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTE='**Windows binaries in this release are UNSIGNED.** They are not covered by the minisign-verified macOS/Linux distribution and are not endorsed by upstream Gentleman-Programming policy (see docs/release-signing.md). Verify the SHA256 in `checksums-windows-UNSIGNED.txt` yourself and run at your own risk.'
+          BODY="$(gh release view "${{ steps.tag.outputs.value }}" --repo "${{ github.repository }}" --json body -q .body)"
+          if [[ "$BODY" != *"UNSIGNED"* ]]; then
+            printf '%s\n\n---\n\n%s\n' "$BODY" "$NOTE" > /tmp/notes.md
+            gh release edit "${{ steps.tag.outputs.value }}" --repo "${{ github.repository }}" --notes-file /tmp/notes.md
+          fi
