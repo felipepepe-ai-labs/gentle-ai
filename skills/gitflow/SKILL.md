@@ -13,6 +13,17 @@ Load this skill before creating a branch or opening a PR in a project that uses 
 
 If the repo only has `main` (no `develop`), it likely uses a trunk-based flow instead — check for a repo-specific branch/PR skill (e.g. this ecosystem's own `branch-pr`) before applying Gitflow here. Do not introduce `develop`/`release/*` into a repo that doesn't already use them without the user's explicit request.
 
+## Flow (authoritative — every other section derives from this)
+
+```
+feature/<slug> -> PR -> develop
+bugfix/<slug>  -> PR -> develop -> release/<version> -> PR -> main -> back-merge PR -> develop
+release/<version> -> PR -> main -> back-merge PR -> develop
+hotfix/<slug>  -> PR -> main -> back-merge PR -> develop
+```
+
+`main` and `develop` never receive a direct commit, direct push, or local merge+push — every arrow above is a Pull Request. `release/*` and `hotfix/*` both end with a **second, mandatory** PR that carries the same change back into `develop` — skipping it lets `develop` drift behind what's actually in production.
+
 ## Branch Model
 
 | Branch | Purpose | Created from | Merges into |
@@ -30,7 +41,7 @@ If the repo only has `main` (no `develop`), it likely uses a trunk-based flow in
 |------|-------------|
 | `main` and `develop` are protected | No direct commits, no direct pushes, no local `git merge` + `git push` to either. Every change lands through a reviewed Pull Request. |
 | One direction of truth | `feature`/`bugfix` never merge into `main` directly — always through `develop` first. |
-| Releases and hotfixes sync both lines | A `release/*` or `hotfix/*` branch merges into **both** `main` and `develop` so `develop` never drifts behind production. |
+| Releases and hotfixes sync both lines | A `release/*` or `hotfix/*` branch merges into `main` via PR, then its exact changes merge into `develop` via a **second, mandatory** PR — never optional, never skipped. |
 | Tag on `main` | Tag the release commit (`vX.Y.Z`) immediately after a `release/*` or `hotfix/*` PR merges into `main`. |
 | Clean up after merge | Delete the source branch once its PR is merged. |
 | Detect before applying | Confirm the repo actually uses Gitflow (`main` + `develop` both exist) before creating `release/*` or `hotfix/*` branches — don't invent the model on a trunk-based repo. |
@@ -70,10 +81,10 @@ All lowercase, hyphen-separated, short and descriptive (e.g. `feature/user-login
    | `feature/*` | `develop` |
    | `bugfix/*` (from `develop`) | `develop` |
    | `bugfix/*` (from `release/*`) | the same `release/*` branch |
-   | `release/*` | `main`, then a follow-up PR (or merge-back) into `develop` |
-   | `hotfix/*` | `main`, then a follow-up PR (or merge-back) into `develop` |
+   | `release/*` | `main`, then a **mandatory** second PR into `develop` |
+   | `hotfix/*` | `main`, then a **mandatory** second PR into `develop` |
 
-4. **After a `release/*` or `hotfix/*` PR merges into `main`**: tag the commit (`vX.Y.Z`), then open the follow-up PR that brings the same changes into `develop` so it stays in sync.
+4. **After a `release/*` or `hotfix/*` PR merges into `main`**: tag the commit (`vX.Y.Z`), then immediately open the back-merge PR that brings the same changes into `develop`. This is not optional — a `release/*` or `hotfix/*` is not done until both PRs have landed.
 5. **Delete the branch** after its PR merges.
 
 ## Quick Reference
