@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport json, sys, datetime, os\nd = json.load(sys.stdin)\ntool = d.get('tool_name', 'unknown')\nroot = d.get('cwd') or os.getcwd()\nti = d.get('tool_input', {}) or {}\nsummary = ti.get('command') or ti.get('file_path') or ti.get('pattern') or ti.get('prompt') or ''\nsummary = str(summary).replace('\\n', ' ')[:200]\nnow = datetime.datetime.now()\noutdir = os.path.join(root, 'docs', 'agent-logs')\nos.makedirs(outdir, exist_ok=True)\npath = os.path.join(outdir, now.strftime('%Y-%m-%d') + '.md')\nwith open(path, 'a') as f:\n    f.write('- %s | tool=%s | %s\\n' % (now.strftime('%H:%M:%S'), tool, summary))\n\" 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
