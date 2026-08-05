@@ -16,6 +16,8 @@ Load this skill whenever you need to:
 - Open a pull request on [Gentleman-Programming/gentle-ai](https://github.com/Gentleman-Programming/gentle-ai)
 - Prepare changes for review
 
+This repo is **trunk-based on `main`** — there is no `develop` branch and no CI runs against one. Do not apply the portable `gitflow` skill's `develop`/`release/*`/`hotfix/*` model to this repo; use the naming and workflow below instead.
+
 ## Critical Rules
 
 1. **Every PR MUST link an approved issue** — `Closes/Fixes/Resolves #<N>` in the PR body, and that issue MUST have `status:approved`. PRs without this are **automatically rejected** by CI.
