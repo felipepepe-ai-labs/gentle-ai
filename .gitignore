@@ -35,3 +35,7 @@ dist/
 # Engram local runtime state (project sync chunks are intentionally versioned)
 .engram/engram.db
 .engram/cloud.json
+
+# Node tooling artifacts (not part of this Go project's build)
+node_modules/
+pnpm-lock.yaml

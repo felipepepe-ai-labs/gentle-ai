@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport json, sys, datetime, os\nd = json.load(sys.stdin)\nagent = d.get('agent_type', 'unknown')\ntranscript = d.get('agent_transcript_path', 'unknown')\nroot = d.get('cwd', '.')\nnow = datetime.datetime.now()\noutdir = os.path.join(root, 'docs', 'agent-logs')\nos.makedirs(outdir, exist_ok=True)\npath = os.path.join(outdir, now.strftime('%Y-%m-%d') + '.md')\nwith open(path, 'a') as f:\n    f.write('- %s | agent=%s | transcript=%s\\n' % (now.strftime('%H:%M:%S'), agent, transcript))\n\" 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
